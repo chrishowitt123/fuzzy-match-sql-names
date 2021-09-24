@@ -1,5 +1,4 @@
-using FuzzySharp;
-using Newtonsoft.Json;
+
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -8,14 +7,14 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using FuzzySharp;
 
-namespace importDictFromFile
+namespace FuzzyMatch
 {
     class Program
     {
         static void Main(string[] args)
         {
-
             Console.WriteLine("Getting Connection ...");
 
             var datasource = @"hsc-sql-2016\BITEAM";//your server
@@ -32,13 +31,16 @@ namespace importDictFromFile
 
 
             var namesSQL = @"
-SELECT *
-FROM OPENQUERY(HSSDPRD, '
-SELECT 
+SELECT * 
+FROM OPENQUERY(HSSDPRD, 'SELECT TOP 500
 --PAPMI_No as UnitNumber
 PAPMI_Name2 as FirstName
 --, PAPMI_Name3 as MiddleName
-,PAPMI_Name as Surname
+, PAPMI_Name as Surname
+, CASE WHEN PAPMI_Name LIKE ''zz % '' THEN ''Remove''
+WHEN PAPMI_Name2 LIKE ''zz % '' THEN ''Remove''
+ELSE NULL
+END as Remove
 --, PAPMI_DOB as DOB
 --, PAPMI_Sex_DR->CTSEX_Desc as Gender
 --, MRG_PAPMI_To_DR->PAPMI_No as MergedTo
@@ -47,16 +49,19 @@ FROM PA_PatMas
 LEFT OUTER JOIN PA_MergePatient
 ON MRG_PAPMI_From_DR = PAPMI_RowID
 
-WHERE PAPMI_Name NOT LIKE ''zz % ''
-
+WHERE CASE
+WHEN PAPMI_Name LIKE ''zz % '' THEN ''Remove''
+WHEN PAPMI_Name2 LIKE ''zz % '' THEN ''Remove''
+ELSE NULL
+END IS NULL
 
 ORDER BY PAPMI_Name, PAPMI_Name2
 
 ')";
 
-        SqlCommand cmd = new SqlCommand(namesSQL, conn);
+            SqlCommand cmd = new SqlCommand(namesSQL, conn);
 
-        DataTable table = new DataTable();
+            DataTable table = new DataTable();
 
             using (SqlDataAdapter adapter = new SqlDataAdapter(cmd))
             {
@@ -67,57 +72,38 @@ ORDER BY PAPMI_Name, PAPMI_Name2
 
 
 
+            List<string> rowsList = new List<string>();
+            string value = string.Empty;
 
-            List<string> names1 = new List<string>();
 
 
             foreach (DataRow row in table.Rows)
             {
-                foreach (DataColumn column in table.Columns)
-                {
-                    names1.Add(row[column].ToString());
-
-                }
-
-            }
-
-            List<string> firstNames = new List<string>();
-            for (int i = 0; i < names1.Count; i += 1)
-            {
-                firstNames.Add(names1[i]);
+                value = value += string.Join(" ", row.ItemArray);
+                rowsList.Add(value);
+                value = string.Empty;
             }
 
 
-            foreach (var fn in firstNames)
-            {
-                Console.WriteLine(fn);
-                Console.WriteLine("\n");
-            }
-
-
-                foreach (var name in names1)
-            {
-                Console.WriteLine(name);
-
-            }
-            Console.WriteLine("Finidhed!");
-            //names1.Add("Dave Adams");
-            //names1.Add("Steve Bee");
-            //names1.Add("Daves Adams");
-            //names1.Add("William Keys");
 
             var tupleList = new List<Tuple<string, string, int>>();
-            for (int i = 0; i < names1.Count - 1; i++)
+            for (int i = 0; i < rowsList.Count - 1; i++)
             {
-                for (int j = i + 1; j < names1.Count; j++)
+                for (int j = i + 1; j < rowsList.Count; j++)
                 {
-                    var ratio = Fuzz.Ratio(names1[i], names1[j]);
+                    var ratio = Fuzz.Ratio(rowsList[i], rowsList[j]);
 
+                    if(ratio < 100)
+                    {
+                        var author = new Tuple<string, string, int>(rowsList[i], rowsList[j], ratio);
+                        tupleList.Add(author);
 
-                    var author = new Tuple<string, string, int>(names1[i], names1[j], ratio);
-                    tupleList.Add(author);
+                    }
+
                 }
             }
+
+
 
             var sortedTups = tupleList.OrderByDescending(t => t.Item3).ToList();
 
@@ -125,6 +111,9 @@ ORDER BY PAPMI_Name, PAPMI_Name2
             {
                 Console.WriteLine(t);
             }
+
+
         }
+
     }
 }

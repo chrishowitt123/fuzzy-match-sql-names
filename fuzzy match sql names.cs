@@ -3,10 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using CsvHelper;
 using FuzzySharp;
 
 namespace FuzzyMatch
@@ -110,6 +112,17 @@ ORDER BY PAPMI_Name, PAPMI_Name2
             foreach (var t in sortedTups)
             {
                 Console.WriteLine(t);
+            }
+
+            using (var writer = new StreamWriter(@"M:\My Documents\Tests\FuzzyMatch\FuzzyResults.csv"))
+            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+            {
+
+                foreach (var t in sortedTups)
+                {
+                    csv.WriteRecord(t);
+                    csv.NextRecord();
+                }
             }
 
 

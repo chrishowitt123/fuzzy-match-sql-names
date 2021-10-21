@@ -1,15 +1,13 @@
-
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
-using System.Globalization;
+using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using CsvHelper;
+using System.Text.RegularExpressions;
 using FuzzySharp;
+using OfficeOpenXml;
+using OfficeOpenXml.Style;
 
 namespace FuzzyMatch
 {
@@ -17,6 +15,10 @@ namespace FuzzyMatch
     {
         static void Main(string[] args)
         {
+
+            Stopwatch watch = new Stopwatch();
+            watch.Start();
+
             Console.WriteLine("Getting Connection ...");
 
             var datasource = @"hsc-sql-2016\BITEAM";//your server
@@ -31,39 +33,31 @@ namespace FuzzyMatch
             SqlConnection conn = new SqlConnection(connString);
             conn.Open();
 
-
             var namesSQL = @"
-SELECT * 
-FROM OPENQUERY(HSSDPRD, 'SELECT TOP 500
---PAPMI_No as UnitNumber
-PAPMI_Name2 as FirstName
---, PAPMI_Name3 as MiddleName
-, PAPMI_Name as Surname
-, CASE WHEN PAPMI_Name LIKE ''zz % '' THEN ''Remove''
-WHEN PAPMI_Name2 LIKE ''zz % '' THEN ''Remove''
-ELSE NULL
-END as Remove
---, PAPMI_DOB as DOB
---, PAPMI_Sex_DR->CTSEX_Desc as Gender
---, MRG_PAPMI_To_DR->PAPMI_No as MergedTo
+SELECT *
+FROM OPENQUERY(HSSDPRD, 
+
+'SELECT TOP 1000
+         PAPMI_No as URN
+       , PAPMI_Name2 as FirstName
+       , PAPMI_Name as LastName
+       , PAPMI_RowId->PAPER_Dob as DOB
 
 FROM PA_PatMas
-LEFT OUTER JOIN PA_MergePatient
-ON MRG_PAPMI_From_DR = PAPMI_RowID
 
-WHERE CASE
-WHEN PAPMI_Name LIKE ''zz % '' THEN ''Remove''
-WHEN PAPMI_Name2 LIKE ''zz % '' THEN ''Remove''
-ELSE NULL
-END IS NULL
+WHERE PAPMI_Name2 NOT LIKE ''zz%''
+AND PAPMI_Name NOT LIKE ''zz%''
 
-ORDER BY PAPMI_Name, PAPMI_Name2
 
 ')";
 
-            SqlCommand cmd = new SqlCommand(namesSQL, conn);
-
             DataTable table = new DataTable();
+            table.Columns.Add("URN", typeof(int));
+            table.Columns.Add("FirstName", typeof(string));
+            table.Columns.Add("LastName", typeof(string));
+            table.Columns.Add("DOB", typeof(string));
+
+            SqlCommand cmd = new SqlCommand(namesSQL, conn);
 
             using (SqlDataAdapter adapter = new SqlDataAdapter(cmd))
             {
@@ -71,62 +65,119 @@ ORDER BY PAPMI_Name, PAPMI_Name2
             }
             conn.Close();
 
+            //Console info
+            watch.Stop();
+            TimeSpan SqlTime = watch.Elapsed;
+            Console.WriteLine($"SQL took {SqlTime.Minutes} minuites and {SqlTime.Seconds} seconds to return query");
+            watch.Restart();
+            Console.WriteLine("Working...");
 
+            DataView dv = table.DefaultView;
+            dv.Sort = "FirstName";
+            DataTable sortedDT = dv.ToTable();
 
+            string[] letters =
+            {
+                "A",
+                "B",
+                "C",
+                "D",
+                "E",
+                "F",
+                "G",
+                "H",
+                "I",
+                "J",
+                "K",
+                "L",
+                "M",
+                "N",
+                "O",
+                "P",
+                "Q",
+                "R",
+                "S",
+                "T",
+                "U",
+                "V",
+                "W",
+                "X",
+                "Y",
+                "Z"
+            };
+
+            var alphaDict = new List<string>(letters);
 
             List<string> rowsList = new List<string>();
             string value = string.Empty;
 
 
-
-            foreach (DataRow row in table.Rows)
+            foreach (DataRow row in sortedDT.Rows)
             {
-                value = value += string.Join(" ", row.ItemArray);
+                value = value += string.Join(" ", row["URN"].ToString(), row["FirstName"].ToString(), row["LastName"].ToString(), row["DOB"].ToString().Replace("00:00:00", "")); 
                 rowsList.Add(value);
                 value = string.Empty;
             }
 
+            DataTable final = new DataTable();
+            final.Columns.Add("X", typeof(string));
+            final.Columns.Add("Y", typeof(string));
+            final.Columns.Add("Score", typeof(int));
 
-
-            var tupleList = new List<Tuple<string, string, int>>();
-            for (int i = 0; i < rowsList.Count - 1; i++)
+            foreach (var letter in letters)
             {
-                for (int j = i + 1; j < rowsList.Count; j++)
+                for (int i = 0; i < rowsList.Count - 1; i++)
                 {
-                    var ratio = Fuzz.Ratio(rowsList[i], rowsList[j]);
-
-                    if(ratio < 100)
+                    for (int j = i + 1; j < rowsList.Count; j++)
                     {
-                        var author = new Tuple<string, string, int>(rowsList[i], rowsList[j], ratio);
-                        tupleList.Add(author);
+                        var matchResult1 = Regex.Match(rowsList[i], @"^([\w\-]+)");
+                        var firstWord1 = matchResult1.Value;
+                        var name1 = rowsList[i].Substring(firstWord1.Length +1);
 
+                        var matchResult2 = Regex.Match(rowsList[i], @"^([\w\-]+)");
+                        var firstWord2 = matchResult2.Value;
+                        var name2 = rowsList[j].Substring(firstWord2.Length +1);
+
+                        if (name1.Split()[1].StartsWith(letter.ToString()) && name2.Split()[1].StartsWith(letter))
+                        {
+                            var ratio = Fuzz.Ratio(name1, name2);
+
+                            if (ratio < 100 && ratio > 95)
+                            {
+                                final.Rows.Add(rowsList[i], rowsList[j], ratio);
+                                Console.WriteLine($"{name1} \t-->\t{name2} \t=\t{ratio} similarity");
+                            }
+                        }
                     }
-
                 }
             }
 
+            var xlsxFile = $@"M:\My Documents\Tests\FuzzyMatch\FuzzyResults.xlsx";
 
-
-            var sortedTups = tupleList.OrderByDescending(t => t.Item3).ToList();
-
-            foreach (var t in sortedTups)
+            if (File.Exists(xlsxFile))
             {
-                Console.WriteLine(t);
+                File.Delete(xlsxFile);
             }
 
-            using (var writer = new StreamWriter(@"M:\My Documents\Tests\FuzzyMatch\FuzzyResults.csv"))
-            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            FileInfo fileInfo = new FileInfo(xlsxFile);
+            using (ExcelPackage package = new ExcelPackage(fileInfo))
             {
 
-                foreach (var t in sortedTups)
-                {
-                    csv.WriteRecord(t);
-                    csv.NextRecord();
-                }
+                ExcelWorksheet ws = package.Workbook.Worksheets.Add("Fuzzies");
+
+                ws.Cells["A1"].LoadFromDataTable(final, true);
+                ws.Cells.AutoFitColumns();
+                ws.Cells.Style.HorizontalAlignment = ExcelHorizontalAlignment.Left;
+                ws.View.FreezePanes(2, 1);
+                package.Save();
+                package.Dispose();
+                watch.Stop();
+                TimeSpan C_SharpTime = watch.Elapsed;
+                Console.WriteLine($"SQL took {C_SharpTime.Minutes} minuites and {C_SharpTime.Seconds} seconds to process and write the data.");
+                Console.WriteLine("Finished!");
+
             }
-
-
         }
-
     }
 }

@@ -37,7 +37,7 @@ namespace FuzzyMatch
 SELECT *
 FROM OPENQUERY(HSSDPRD, 
 
-'SELECT TOP 1000
+'SELECT TOP 3000
          PAPMI_No as URN
        , PAPMI_Name2 as FirstName
        , PAPMI_Name as LastName
@@ -138,7 +138,7 @@ AND PAPMI_Name NOT LIKE ''zz%''
                         var firstWord2 = matchResult2.Value;
                         var name2 = rowsList[j].Substring(firstWord2.Length +1);
 
-                        if (name1.Split()[1].StartsWith(letter.ToString()) && name2.Split()[1].StartsWith(letter))
+                        if (name1.StartsWith(letter.ToString()) && name2.StartsWith(letter))
                         {
                             var ratio = Fuzz.Ratio(name1, name2);
 

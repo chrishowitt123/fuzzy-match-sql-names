@@ -4,6 +4,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using FuzzySharp;
 using OfficeOpenXml;
@@ -36,13 +37,12 @@ namespace FuzzyMatch
 SELECT *
 FROM OPENQUERY(HSSDPRD, 
 
-'SELECT TOP 5000
+'SELECT TOP 7000
          PAPMI_No as URN
        , PAPMI_Name2 as FirstName
        , PAPMI_Name as LastName
        , PAPMI_RowId->PAPER_Dob as DOB
        , PAPMI_RowId->PAPER_Sex_DR->CTSEX_Desc as Gender
-
 
 FROM PA_PatMas
 
@@ -67,6 +67,7 @@ AND PAPMI_Name NOT LIKE ''zz%''
             }
             conn.Close();
 
+
             //Console info
             watch.Stop();
             TimeSpan SqlTime = watch.Elapsed;
@@ -74,12 +75,15 @@ AND PAPMI_Name NOT LIKE ''zz%''
             watch.Restart();
             Console.WriteLine("Working...\n");
 
+            DataTable tableDistinct = table.DefaultView.ToTable( /*distinct*/ true);
+
+
             //Filter by gender and split data into 2 DataTables before adding to DataSet
-            DataView dvF = table.DefaultView;
+            DataView dvF = tableDistinct.DefaultView;
             dvF.RowFilter = "Gender = 'Female'";
             DataTable femaleDT = dvF.ToTable();
 
-            DataView dvM = table.DefaultView;
+            DataView dvM = tableDistinct.DefaultView;
             dvF.RowFilter = "Gender = 'Male'";
             DataTable maleDT = dvF.ToTable();
 
@@ -139,31 +143,34 @@ AND PAPMI_Name NOT LIKE ''zz%''
                 }
 
                 DataTable final = new DataTable();
-                final.Columns.Add("X", typeof(string));
-                final.Columns.Add("Y", typeof(string));
+                final.Columns.Add("URN1", typeof(int));
+                final.Columns.Add("Name1", typeof(string));
+                final.Columns.Add("URN2", typeof(int));
+                final.Columns.Add("Name2", typeof(string));
                 final.Columns.Add("Score", typeof(int));
 
                 foreach (var letter in letters)
                 {
+                    Console.WriteLine($"Processing {genderGroup} {letter}'s");
                     for (int i = 0; i < rowsListDict.Count - 1; i++)
                     {
                         for (int j = i + 1; j < rowsListDict.Count; j++)
                         {
                             var matchResult1 = Regex.Match(rowsListDict[i], @"^([\w\-]+)");
-                            var firstWord1 = matchResult1.Value;
-                            var name1 = rowsListDict[i].Substring(firstWord1.Length + 1);
+                            var URN1 = matchResult1.Value;
+                            var name1 = rowsListDict[i].Substring(URN1.Length + 1);
 
                             var matchResult2 = Regex.Match(rowsListDict[i], @"^([\w\-]+)");
-                            var firstWord2 = matchResult2.Value;
-                            var name2 = rowsListDict[j].Substring(firstWord2.Length + 1);
+                            var URN2 = matchResult2.Value;
+                            var name2 = rowsListDict[j].Substring(URN2.Length + 1);
 
                             if (name1.StartsWith(letter.ToString()) && name2.StartsWith(letter))    //name1.StartsWith(letter.ToString()) && name2.StartsWith(letter)
                             {
                                 var ratio = Fuzz.Ratio(name1, name2);
 
-                                if (ratio < 100 && ratio > 90)
+                                if (ratio < 100 && ratio > 94)
                                 {
-                                    final.Rows.Add(rowsListDict[i], rowsListDict[j], ratio);
+                                    final.Rows.Add(URN1, name1, URN2, name2, ratio);
                                     Console.WriteLine($"{name1} \t-->\t{name2} \t=\t{ratio} similarity");
                                 }
                             }
@@ -196,8 +203,8 @@ AND PAPMI_Name NOT LIKE ''zz%''
             }
             watch.Stop();
             TimeSpan C_SharpTime = watch.Elapsed;
-            Console.WriteLine($"SQL took {C_SharpTime.Minutes} minuites and {C_SharpTime.Seconds} seconds to process and write the data.");
+            Console.WriteLine($"C# took {C_SharpTime.Minutes} minuites and {C_SharpTime.Seconds} seconds to process and write the data.");
             Console.WriteLine("Finished!");
-        }  
+        }
     }
 }

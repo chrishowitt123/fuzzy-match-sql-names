@@ -37,7 +37,7 @@ namespace FuzzyMatch
 SELECT *
 FROM OPENQUERY(HSSDPRD, 
 
-'SELECT TOP 3000
+'SELECT TOP 15000
          PAPMI_No as URN
        , PAPMI_Name2 as FirstName
        , PAPMI_Name as LastName
@@ -108,16 +108,25 @@ AND PAPMI_Name NOT LIKE ''zz%''
 
             var alphaDict = new List<string>(letters);
 
-            List<string> rowsList = new List<string>();
             string value = string.Empty;
 
+            Dictionary<int, string> rowsListDict = new Dictionary<int, string>();
 
+            var n = 0;
             foreach (DataRow row in sortedDT.Rows)
             {
-                value = value += string.Join(" ", row["URN"].ToString(), row["FirstName"].ToString(), row["LastName"].ToString(), row["DOB"].ToString().Replace("00:00:00", "")); 
-                rowsList.Add(value);
+                value = value += string.Join(" ", row["URN"].ToString(), row["FirstName"].ToString(), row["LastName"].ToString(), row["DOB"].ToString().Replace("00:00:00", ""));
+                rowsListDict.Add(n, value);
                 value = string.Empty;
+                n = n + 1;
             }
+
+            foreach (var pair in rowsListDict)
+            {
+
+                Console.WriteLine($"{pair.Key}: {pair.Value}");
+            }
+
 
             DataTable final = new DataTable();
             final.Columns.Add("X", typeof(string));
@@ -126,25 +135,25 @@ AND PAPMI_Name NOT LIKE ''zz%''
 
             foreach (var letter in letters)
             {
-                for (int i = 0; i < rowsList.Count - 1; i++)
+                for (int i = 0; i < rowsListDict.Count - 1; i++)
                 {
-                    for (int j = i + 1; j < rowsList.Count; j++)
+                    for (int j = i + 1; j < rowsListDict.Count; j++)
                     {
-                        var matchResult1 = Regex.Match(rowsList[i], @"^([\w\-]+)");
+                        var matchResult1 = Regex.Match(rowsListDict[i], @"^([\w\-]+)");
                         var firstWord1 = matchResult1.Value;
-                        var name1 = rowsList[i].Substring(firstWord1.Length +1);
+                        var name1 = rowsListDict[i].Substring(firstWord1.Length + 1);
 
-                        var matchResult2 = Regex.Match(rowsList[i], @"^([\w\-]+)");
+                        var matchResult2 = Regex.Match(rowsListDict[i], @"^([\w\-]+)");
                         var firstWord2 = matchResult2.Value;
-                        var name2 = rowsList[j].Substring(firstWord2.Length +1);
+                        var name2 = rowsListDict[j].Substring(firstWord2.Length + 1);
 
-                        if (name1.StartsWith(letter.ToString()) && name2.StartsWith(letter))
+                        if (name1.StartsWith(letter.ToString()) && name2.StartsWith(letter))    //name1.StartsWith(letter.ToString()) && name2.StartsWith(letter)
                         {
                             var ratio = Fuzz.Ratio(name1, name2);
 
                             if (ratio < 100 && ratio > 95)
                             {
-                                final.Rows.Add(rowsList[i], rowsList[j], ratio);
+                                final.Rows.Add(rowsListDict[i], rowsListDict[j], ratio);
                                 Console.WriteLine($"{name1} \t-->\t{name2} \t=\t{ratio} similarity");
                             }
                         }

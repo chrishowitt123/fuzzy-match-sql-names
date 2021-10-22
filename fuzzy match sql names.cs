@@ -23,7 +23,7 @@ namespace FuzzyMatch
             Console.WriteLine("Getting Connection ...");
 
             var datasource = @"hsc-sql-2016\BITEAM";
-            var database = "TrakCareBI"; 
+            var database = "TrakCareBI";
 
             //Connection string 
             string connString = @"Data Source=" + datasource + ";Initial Catalog="
@@ -36,19 +36,15 @@ namespace FuzzyMatch
             var namesSQL = @"
 SELECT *
 FROM OPENQUERY(HSSDPRD, 
-
-'SELECT TOP 7000
+'SELECT TOP 3000
          PAPMI_No as URN
        , PAPMI_Name2 as FirstName
        , PAPMI_Name as LastName
        , PAPMI_RowId->PAPER_Dob as DOB
        , PAPMI_RowId->PAPER_Sex_DR->CTSEX_Desc as Gender
-
 FROM PA_PatMas
-
 WHERE PAPMI_Name2 NOT LIKE ''zz%''
 AND PAPMI_Name NOT LIKE ''zz%''
-
 ')";
 
             //Create DataTable to hold SQL query data and fill
@@ -130,7 +126,28 @@ AND PAPMI_Name NOT LIKE ''zz%''
 
             Dictionary<int, string> rowsListDict = new Dictionary<int, string>();
 
-            foreach(DataTable genderGroup in GendersDS.Tables)
+
+            string notepad = @"M:\My Documents\Tests\FuzzyMatch\.txt";
+
+            if (File.Exists(notepad))
+            {
+                File.Delete(notepad);
+            }
+
+            StreamWriter sw = new StreamWriter(@"M:\My Documents\Tests\FuzzyMatch\FuzzyResults.txt");
+
+
+
+
+            var xlsxFile = $@"M:\My Documents\Tests\FuzzyMatch\FuzzyResults.xlsx";
+
+            if (File.Exists(xlsxFile))
+            {
+                File.Delete(xlsxFile);
+            }
+
+
+            foreach (DataTable genderGroup in GendersDS.Tables)
 
             {
                 var n = 0;
@@ -158,11 +175,11 @@ AND PAPMI_Name NOT LIKE ''zz%''
                         {
                             var matchResult1 = Regex.Match(rowsListDict[i], @"^([\w\-]+)");
                             var URN1 = matchResult1.Value;
-                            var name1 = rowsListDict[i].Substring(URN1.Length + 1);
+                            var name1 = rowsListDict[i].Substring(URN1.Length + 1).Trim();
 
                             var matchResult2 = Regex.Match(rowsListDict[i], @"^([\w\-]+)");
                             var URN2 = matchResult2.Value;
-                            var name2 = rowsListDict[j].Substring(URN2.Length + 1);
+                            var name2 = rowsListDict[j].Substring(URN2.Length + 1).Trim();
 
                             if (name1.StartsWith(letter.ToString()) && name2.StartsWith(letter))    //name1.StartsWith(letter.ToString()) && name2.StartsWith(letter)
                             {
@@ -170,6 +187,7 @@ AND PAPMI_Name NOT LIKE ''zz%''
 
                                 if (ratio < 100 && ratio > 94)
                                 {
+                                    sw.WriteLine(String.Join(",", URN1, name1, URN2, name2, ratio));
                                     final.Rows.Add(URN1, name1, URN2, name2, ratio);
                                     Console.WriteLine($"{name1} \t-->\t{name2} \t=\t{ratio} similarity");
                                 }
@@ -178,19 +196,12 @@ AND PAPMI_Name NOT LIKE ''zz%''
                     }
                 }
 
-                var xlsxFile = $@"M:\My Documents\Tests\FuzzyMatch\{genderGroup}_FuzzyResults.xlsx";
-
-                if (File.Exists(xlsxFile))
-                {
-                    File.Delete(xlsxFile);
-                }
-
                 ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
                 FileInfo fileInfo = new FileInfo(xlsxFile);
                 using (ExcelPackage package = new ExcelPackage(fileInfo))
                 {
 
-                    ExcelWorksheet ws = package.Workbook.Worksheets.Add("Fuzzies");
+                    ExcelWorksheet ws = package.Workbook.Worksheets.Add($"{genderGroup}");
 
                     ws.Cells["A1"].LoadFromDataTable(final, true);
                     ws.Cells.AutoFitColumns();
@@ -205,6 +216,7 @@ AND PAPMI_Name NOT LIKE ''zz%''
             TimeSpan C_SharpTime = watch.Elapsed;
             Console.WriteLine($"C# took {C_SharpTime.Minutes} minuites and {C_SharpTime.Seconds} seconds to process and write the data.");
             Console.WriteLine("Finished!");
+            sw.Close();
         }
     }
 }

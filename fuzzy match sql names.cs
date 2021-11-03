@@ -36,7 +36,7 @@ namespace FuzzyMatch
             var namesSQL = @"
 SELECT *
 FROM OPENQUERY(HSSDPRD, 
-'SELECT TOP 3000
+'SELECT 
          PAPMI_No as URN
        , PAPMI_Name2 as FirstName
        , PAPMI_Name as LastName
@@ -45,6 +45,7 @@ FROM OPENQUERY(HSSDPRD,
 FROM PA_PatMas
 WHERE PAPMI_Name2 NOT LIKE ''zz%''
 AND PAPMI_Name NOT LIKE ''zz%''
+AND PAPMI_Active is NULL
 ')";
 
             //Create DataTable to hold SQL query data and fill
@@ -126,18 +127,13 @@ AND PAPMI_Name NOT LIKE ''zz%''
 
             Dictionary<int, string> rowsListDict = new Dictionary<int, string>();
 
-
             string notepad = @"M:\My Documents\Tests\FuzzyMatch\.txt";
 
             if (File.Exists(notepad))
             {
                 File.Delete(notepad);
             }
-
             StreamWriter sw = new StreamWriter(@"M:\My Documents\Tests\FuzzyMatch\FuzzyResults.txt");
-
-
-
 
             var xlsxFile = $@"M:\My Documents\Tests\FuzzyMatch\FuzzyResults.xlsx";
 
@@ -145,7 +141,6 @@ AND PAPMI_Name NOT LIKE ''zz%''
             {
                 File.Delete(xlsxFile);
             }
-
 
             foreach (DataTable genderGroup in GendersDS.Tables)
 
@@ -168,18 +163,18 @@ AND PAPMI_Name NOT LIKE ''zz%''
 
                 foreach (var letter in letters)
                 {
-                    Console.WriteLine($"Processing {genderGroup} {letter}'s");
+                    
                     for (int i = 0; i < rowsListDict.Count - 1; i++)
                     {
                         for (int j = i + 1; j < rowsListDict.Count; j++)
                         {
                             var matchResult1 = Regex.Match(rowsListDict[i], @"^([\w\-]+)");
                             var URN1 = matchResult1.Value;
-                            var name1 = rowsListDict[i].Substring(URN1.Length + 1).Trim();
+                            var name1 = rowsListDict[i].Substring(URN1.Length + 1);
 
-                            var matchResult2 = Regex.Match(rowsListDict[i], @"^([\w\-]+)");
+                            var matchResult2 = Regex.Match(rowsListDict[j], @"^([\w\-]+)");
                             var URN2 = matchResult2.Value;
-                            var name2 = rowsListDict[j].Substring(URN2.Length + 1).Trim();
+                            var name2 = rowsListDict[j].Substring(URN2.Length + 1);
 
                             if (name1.StartsWith(letter.ToString()) && name2.StartsWith(letter))    //name1.StartsWith(letter.ToString()) && name2.StartsWith(letter)
                             {
@@ -188,13 +183,15 @@ AND PAPMI_Name NOT LIKE ''zz%''
                                 if (ratio < 100 && ratio > 94)
                                 {
                                     sw.WriteLine(String.Join(",", URN1, name1, URN2, name2, ratio));
+                                    
                                     final.Rows.Add(URN1, name1, URN2, name2, ratio);
-                                    Console.WriteLine($"{name1} \t-->\t{name2} \t=\t{ratio} similarity");
+                                    Console.WriteLine($"{URN1},{name1},{URN2},{name2},{ratio}");
                                 }
                             }
                         }
                     }
                 }
+
 
                 ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
                 FileInfo fileInfo = new FileInfo(xlsxFile);
@@ -214,9 +211,10 @@ AND PAPMI_Name NOT LIKE ''zz%''
             }
             watch.Stop();
             TimeSpan C_SharpTime = watch.Elapsed;
+            sw.Close();
             Console.WriteLine($"C# took {C_SharpTime.Minutes} minuites and {C_SharpTime.Seconds} seconds to process and write the data.");
             Console.WriteLine("Finished!");
-            sw.Close();
+            
         }
     }
 }
